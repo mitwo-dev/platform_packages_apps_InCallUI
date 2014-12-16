@@ -19,6 +19,7 @@ package com.android.incallui;
 import android.content.Context;
 import android.content.res.Resources;
 import android.content.res.Configuration;
+//import android.content.res.Resources;
 import android.graphics.Point;
 import android.graphics.SurfaceTexture;
 import android.os.Bundle;
@@ -34,6 +35,8 @@ import android.widget.Toast;
 
 import com.google.common.base.Objects;
 import android.widget.Toast;
+import android.telecom.Connection;
+import android.telecom.Connection.VideoProvider;
 import android.telecom.VideoProfile;
 import android.telecom.Connection;
 
@@ -62,6 +65,11 @@ public class VideoCallFragment extends BaseFragment<VideoCallPresenter,
      * Used to indicate that the UI rotation is unknown.
      */
     public static final int ORIENTATION_UNKNOWN = -1;
+
+    /**
+     * Invalid resource id.
+     */
+    public static final int INVALID_RESOURCE_ID = -1;
 
 
     // Static storage used to retain the video surfaces across Activity restart.
@@ -446,7 +454,6 @@ public class VideoCallFragment extends BaseFragment<VideoCallPresenter,
      * @param displayVideo The video view to center.
      */
     private void centerDisplayView(View displayVideo) {
-        Log.d(this, "centerDisplayView: IsLandscape=" + mIsLandscape);
         // In a lansdcape layout we need to ensure we horizontally center the view based on whether
         // the layout is left-to-right or right-to-left.
         // In a left-to-right locale, the space for the video view is to the right of the call card
@@ -455,9 +462,13 @@ public class VideoCallFragment extends BaseFragment<VideoCallPresenter,
         // so we need to translate it in the -X direction.
         final boolean isLayoutRtl = InCallPresenter.isRtl();
 
+        ViewGroup.LayoutParams params = displayVideo.getLayoutParams();
         float spaceBesideCallCard = InCallPresenter.getInstance().getSpaceBesideCallCard();
+        Log.d(this, "centerDisplayView: IsLandscape= " + mIsLandscape + " Layout width: " +
+                params.width + " height: " + params.height + " spaceBesideCallCard: "
+                + spaceBesideCallCard);
         if (mIsLandscape) {
-            float videoViewTranslation = displayVideo.getWidth() / 2
+            float videoViewTranslation = params.width / 2
                     - spaceBesideCallCard / 2;
             if (isLayoutRtl) {
                 displayVideo.setTranslationX(-videoViewTranslation);
@@ -465,7 +476,7 @@ public class VideoCallFragment extends BaseFragment<VideoCallPresenter,
                 displayVideo.setTranslationX(videoViewTranslation);
             }
         } else {
-            float videoViewTranslation = displayVideo.getHeight() / 2
+            float videoViewTranslation = params.height / 2
                     - spaceBesideCallCard / 2;
             displayVideo.setTranslationY(videoViewTranslation);
         }
@@ -531,13 +542,11 @@ public class VideoCallFragment extends BaseFragment<VideoCallPresenter,
     }
 
     /**
-     * Toggles visibility of the video UI.
+     * Inflate video surfaces.
      *
      * @param show {@code True} if the video surfaces should be shown.
      */
-    @Override
-    public void showVideoUi(boolean show) {
-        Log.d(this, "showVideoUi " + show);
+    private void inflateVideoUi(boolean show) {
         int visibility = show ? View.VISIBLE : View.GONE;
         getView().setVisibility(visibility);
 
@@ -545,9 +554,67 @@ public class VideoCallFragment extends BaseFragment<VideoCallPresenter,
             inflateVideoCallViews();
         }
 
-        if (mVideoViews != null ) {
+        if (mVideoViews != null) {
             mVideoViews.setVisibility(visibility);
         }
+    }
+
+    /**
+     * Show Tranmission UI and hide Reception UI.
+     */
+    public void showVideoTransmissionUi() {
+        inflateVideoUi(true);
+
+        View incomingVideoView = mVideoViews.findViewById(R.id.incomingVideo);
+        View previewVideoView = mVideoViews.findViewById(R.id.previewVideo);
+
+        if (incomingVideoView != null) {
+            incomingVideoView.setVisibility(View.INVISIBLE);
+        }
+        if (previewVideoView != null) {
+            previewVideoView.setVisibility(View.VISIBLE);
+        }
+    }
+
+    /**
+     * Show Reception UI and hide Tranmission UI.
+     */
+    public void showVideoReceptionUi() {
+        inflateVideoUi(true);
+
+        View incomingVideoView = mVideoViews.findViewById(R.id.incomingVideo);
+        View previewVideoView = mVideoViews.findViewById(R.id.previewVideo);
+
+        if (incomingVideoView != null) {
+            incomingVideoView.setVisibility(View.VISIBLE);
+        }
+        if (previewVideoView != null) {
+            previewVideoView.setVisibility(View.INVISIBLE);
+        }
+    }
+
+    /**
+     * Show all video views.
+     */
+    public void showVideoBidrectionalUi() {
+        inflateVideoUi(true);
+
+        View incomingVideoView = mVideoViews.findViewById(R.id.incomingVideo);
+        View previewVideoView = mVideoViews.findViewById(R.id.previewVideo);
+
+        if (incomingVideoView != null) {
+            incomingVideoView.setVisibility(View.VISIBLE);
+        }
+        if (previewVideoView != null) {
+            previewVideoView.setVisibility(View.VISIBLE);
+        }
+    }
+
+    /**
+     * Hide all video views.
+     */
+    public void hideVideoUi() {
+        inflateVideoUi(false);
     }
 
     /**
@@ -558,25 +625,33 @@ public class VideoCallFragment extends BaseFragment<VideoCallPresenter,
     public void showVideoQualityChanged(int videoQuality) {
         Log.d(this, "showVideoQualityChanged. Video quality changed to " + videoQuality);
 
-        String videoQualityChangedText = "Video quality changed to ";
+        final Context context = getActivity();
+        if (context == null) {
+            Log.e(this, "showVideoQualityChanged - Activity is null. Return");
+            return;
+        }
+
+        final Resources resources = context.getResources();
+
+        int videoQualityResourceId = R.string.video_quality_unknown;
         switch (videoQuality) {
             case VideoProfile.QUALITY_HIGH:
-                videoQualityChangedText += "High";
+                videoQualityResourceId = R.string.video_quality_high;
                 break;
             case VideoProfile.QUALITY_MEDIUM:
-                videoQualityChangedText += "Medium";
+                videoQualityResourceId = R.string.video_quality_medium;
                 break;
             case VideoProfile.QUALITY_LOW:
-                videoQualityChangedText += "Low";
+                videoQualityResourceId = R.string.video_quality_low;
                 break;
-            // Both unknown and default should display unknown. Intentional fall through.
-            case VideoProfile.QUALITY_UNKNOWN:
             default:
-                videoQualityChangedText += "Unknown";
                 break;
         }
 
-        Toast.makeText(getActivity(), videoQualityChangedText, Toast.LENGTH_SHORT).show();
+        String videoQualityChangedText = resources.getString(R.string.video_quality_changed) +
+            resources.getString(videoQualityResourceId);
+
+        Toast.makeText(context, videoQualityChangedText, Toast.LENGTH_SHORT).show();
     }
 
     /**
@@ -594,28 +669,28 @@ public class VideoCallFragment extends BaseFragment<VideoCallPresenter,
         }
 
         final Resources resources = context.getResources();
-        String callSubstateChangedText = "";
 
+        int callSubstateResourceId = INVALID_RESOURCE_ID;
         switch (callSubstate) {
             case Connection.CALL_SUBSTATE_NONE:
-                callSubstateChangedText +=
-                    resources.getString(R.string.call_substate_call_resumed);
+                callSubstateResourceId = R.string.call_substate_call_resumed;
                 break;
             case Connection.CALL_SUBSTATE_AUDIO_CONNECTED_SUSPENDED:
-                callSubstateChangedText +=
-                    resources.getString(R.string.call_substate_connected_suspended_audio);
+                callSubstateResourceId = R.string.call_substate_connected_suspended_audio;
                 break;
             case Connection.CALL_SUBSTATE_VIDEO_CONNECTED_SUSPENDED:
-                callSubstateChangedText +=
-                    resources.getString(R.string.call_substate_connected_suspended_video);
+                callSubstateResourceId = R.string.call_substate_connected_suspended_video;
                 break;
             case Connection.CALL_SUBSTATE_AVP_RETRY:
-                callSubstateChangedText += resources.getString(R.string.call_substate_avp_retry);
+                callSubstateResourceId = R.string.call_substate_avp_retry;
                 break;
             default:
                 break;
         }
-        Toast.makeText(context, callSubstateChangedText, Toast.LENGTH_SHORT).show();
+        if (callSubstateResourceId != INVALID_RESOURCE_ID) {
+            Toast.makeText(context, resources.getString(callSubstateResourceId),
+                Toast.LENGTH_SHORT).show();
+        }
     }
 
     /**
@@ -780,6 +855,35 @@ public class VideoCallFragment extends BaseFragment<VideoCallPresenter,
         Toast.makeText(context, "dataUsage=" + dataUsage, Toast.LENGTH_LONG).show();
     }
 
+    private int fromCallSessionEvent(int event) {
+        switch (event) {
+            case Connection.VideoProvider.SESSION_EVENT_RX_PAUSE:
+                return R.string.player_stopped;
+            case Connection.VideoProvider.SESSION_EVENT_RX_RESUME:
+                return R.string.player_started;
+            case Connection.VideoProvider.SESSION_EVENT_CAMERA_FAILURE:
+                return R.string.camera_not_ready;
+            case Connection.VideoProvider.SESSION_EVENT_CAMERA_READY:
+                return R.string.camera_ready;
+            default:
+                return R.string.unknown_call_session_event;
+        }
+    }
+
+    /**
+     * Sets the call's data usage value
+     *
+     * @param context the current context
+     * @param event the call session event
+     */
+    @Override
+    public void displayCallSessionEvent(int event) {
+        Log.d(this, "displayCallSessionEvent: event = " + event);
+        Context context = getActivity();
+        String msg = context.getResources().getString(fromCallSessionEvent(event));
+        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show();
+    }
+
     /**
      * Determines the size of the device screen.
      *
@@ -855,8 +959,7 @@ public class VideoCallFragment extends BaseFragment<VideoCallPresenter,
         // It is only after layout is complete that the dimensions of the Call Card has been
         // established, which is a prerequisite to centering the view.
         // Incoming video calls will center the view
-        if (mIsLayoutComplete && ((mIsLandscape && textureView.getTranslationX() == 0) || (
-                !mIsLandscape && textureView.getTranslationY() == 0))) {
+        if (mIsLayoutComplete) {
             centerDisplayView(textureView);
         }
     }
