@@ -20,6 +20,7 @@ import com.android.contacts.common.CallUtil;
 import com.android.incallui.CallList.Listener;
 
 import android.content.Context;
+import android.hardware.camera2.CameraCharacteristics;
 import android.net.Uri;
 import android.telecom.CallProperties;
 import android.telecom.DisconnectCause;
@@ -124,6 +125,48 @@ public final class Call {
         public static final int UPGRADE_TO_VIDEO_REQUEST_TIMED_OUT = 4;
     }
 
+    public static class VideoSettings {
+        public static final int CAMERA_DIRECTION_UNKNOWN = -1;
+        public static final int CAMERA_DIRECTION_FRONT_FACING =
+                CameraCharacteristics.LENS_FACING_FRONT;
+        public static final int CAMERA_DIRECTION_BACK_FACING =
+                CameraCharacteristics.LENS_FACING_BACK;
+
+        private int mCameraDirection = CAMERA_DIRECTION_UNKNOWN;
+
+        /**
+         * Sets the camera direction. if camera direction is set to CAMERA_DIRECTION_UNKNOWN,
+         * the video state of the call should be used to infer the camera direction.
+         *
+         * @see {@link CameraCharacteristics#LENS_FACING_FRONT}
+         * @see {@link CameraCharacteristics#LENS_FACING_BACK}
+         */
+        public void setCameraDir(int cameraDirection) {
+            if (cameraDirection == CAMERA_DIRECTION_FRONT_FACING
+               || cameraDirection == CAMERA_DIRECTION_BACK_FACING) {
+                mCameraDirection = cameraDirection;
+            } else {
+                mCameraDirection = CAMERA_DIRECTION_UNKNOWN;
+            }
+        }
+
+        /**
+         * Gets the camera direction. if camera direction is set to CAMERA_DIRECTION_UNKNOWN,
+         * the video state of the call should be used to infer the camera direction.
+         *
+         * @see {@link CameraCharacteristics#LENS_FACING_FRONT}
+         * @see {@link CameraCharacteristics#LENS_FACING_BACK}
+         */
+        public int getCameraDir() {
+            return mCameraDirection;
+        }
+
+        public String toString() {
+            return "(CameraDir:" + getCameraDir() + ")";
+        }
+    }
+
+
     private static final String ID_PREFIX = Call.class.getSimpleName() + "_";
     private static int sIdCounter = 0;
     public boolean mIsActiveSub = false;
@@ -202,6 +245,8 @@ public final class Call {
     private DisconnectCause mDisconnectCause;
     private int mSessionModificationState;
     private final List<String> mChildCallIds = new ArrayList<>();
+    private final VideoSettings mVideoSettings = new VideoSettings();
+    private int mModifyToVideoState = VideoProfile.VideoState.AUDIO_ONLY;
 
     private InCallVideoCallListener mVideoCallListener;
 
@@ -214,6 +259,14 @@ public final class Call {
 
     public android.telecom.Call getTelecommCall() {
         return mTelecommCall;
+    }
+
+    /**
+     * @return video settings of the call, null if the call is not a video call.
+     * @see VideoProfile
+     */
+    public VideoSettings getVideoSettings() {
+        return mVideoSettings;
     }
 
     private void update() {
@@ -358,11 +411,13 @@ public final class Call {
                     // Cannot merge calls if there are no calls to merge with.
                     return false;
                 }
-            } else if (mTelecommCall.getConferenceableCalls().isEmpty() &&
+            } else if (mTelecommCall.getConferenceableCalls().isEmpty() ||
                     ((PhoneCapabilities.MERGE_CONFERENCE & supportedCapabilities) == 0)) {
-                // Cannot merge calls if there are no calls to merge with.
+                // Cannot merge calls if there are no calls to merge with or
+                // capability to merge is missing
                 return false;
             }
+            // Clearing this bit means this capability is available
             capabilities &= ~PhoneCapabilities.MERGE_CONFERENCE;
         }
         return (capabilities == (capabilities & mTelecommCall.getDetails().getCallCapabilities()));
@@ -434,19 +489,58 @@ public final class Call {
                 VideoProfile.VideoState.isVideo(getVideoState());
     }
 
+    /**
+     * This method is called when we request for a video upgrade or downgrade. This handles the
+     * session modification state RECEIVED_UPGRADE_TO_VIDEO_REQUEST and sets the video state we
+     * want to upgrade/downgrade to.
+     */
+    public void setSessionModificationTo(int videoState) {
+        Log.d(this, "setSessionModificationTo - video state= " + videoState);
+        if (videoState == getVideoState()) {
+            mSessionModificationState = Call.SessionModificationState.NO_REQUEST;
+            Log.w(this,"setSessionModificationTo - Clearing session modification state");
+        } else {
+            mSessionModificationState =
+                Call.SessionModificationState.RECEIVED_UPGRADE_TO_VIDEO_REQUEST;
+            setModifyToVideoState(videoState);
+            CallList.getInstance().onUpgradeToVideo(this);
+        }
+
+        Log.d(this, "setSessionModificationTo - mSessionModificationState="
+            + mSessionModificationState + " video state= " + videoState);
+        update();
+    }
+
+    /**
+     * This method is called to handle any other session modification states other than
+     * RECEIVED_UPGRADE_TO_VIDEO_REQUEST. We set the modification state and reset the video state
+     * when an upgrade request has been completed or failed.
+     */
     public void setSessionModificationState(int state) {
+        if (state == Call.SessionModificationState.RECEIVED_UPGRADE_TO_VIDEO_REQUEST) {
+            Log.e(this,
+            "setSessionModificationState not to be called for RECEIVED_UPGRADE_TO_VIDEO_REQUEST");
+            return;
+        }
+
         boolean hasChanged = mSessionModificationState != state;
         mSessionModificationState = state;
         Log.d(this, "setSessionModificationState" + state + " mSessionModificationState="
                 + mSessionModificationState);
-
-        if (state == Call.SessionModificationState.RECEIVED_UPGRADE_TO_VIDEO_REQUEST) {
-            CallList.getInstance().onUpgradeToVideo(this);
+        if (state != Call.SessionModificationState.WAITING_FOR_RESPONSE) {
+            setModifyToVideoState(VideoProfile.VideoState.AUDIO_ONLY);
         }
-
         if (hasChanged) {
             update();
         }
+    }
+
+    private void setModifyToVideoState(int newVideoState) {
+        mModifyToVideoState = newVideoState;
+    }
+
+    public int getModifyToVideoState() {
+        return mModifyToVideoState;
     }
 
     public static boolean areSame(Call call1, Call call2) {
@@ -468,7 +562,8 @@ public final class Call {
     public String toString() {
         return String.format(Locale.US,
                 "[%s, %s, %s, children:%s, parent:%s, videoState:%d, mIsActivSub:%b,"
-                        + " " + "callSubState:%d, mSessionModificationState:%d, conferenceable:%s]",
+                        + " " + "callSubState:%d, mSessionModificationState:%d, conferenceable:%s, "
+                                + "VideoSettings:%s]",
                 mId,
                 State.toString(getState()),
                 PhoneCapabilities.toString(mTelecommCall.getDetails().getCallCapabilities()),
@@ -476,6 +571,11 @@ public final class Call {
                 getParentId(),
                 mTelecommCall.getDetails().getVideoState(), mIsActiveSub,
                 mTelecommCall.getDetails().getCallSubstate(), mSessionModificationState,
-                this.mTelecommCall.getConferenceableCalls());
+                this.mTelecommCall.getConferenceableCalls(),
+                getVideoSettings());
+    }
+
+    public String toSimpleString() {
+        return super.toString();
     }
 }

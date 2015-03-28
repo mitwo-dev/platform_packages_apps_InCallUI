@@ -181,6 +181,10 @@
     <!-- Label for "Video Call" notification action. This is a displayed on the notification for an
          incoming video call, and answers the call as a video call. [CHAR LIMIT=12] -->
     <string name="notification_action_answer_video">Video</string>
+    <!-- Label for "More" notification action. This is a displayed on the notification for an
+         incoming call, and brings the phone application to foreground and displays multiple options
+         for accepting (or declining) the call. [CHAR LIMIT=12] -->
+    <string name="notification_action_answer_more">More</string>
     <!-- Label for "Voice" notification action. This is a displayed on the notification for an
          incoming video call, and answers the call as an audio call. [CHAR LIMIT=12] -->
     <string name="notification_action_answer_voice">Voice</string>
@@ -262,6 +266,8 @@
     <string name="overflowSwapMenuItemText">Swap calls</string>
     <!-- Text for the overflow "Add participant" menu item. -->
     <string name="overflowAddParticipantMenuItemText">Add participant</string>
+    <!-- Text for the overflow "Manage Conference Video Call" menu item. -->
+    <string name="overflowManageConferenceMenuItemText">Manage Conference</string>
 
     <!-- Text for the onscreen "Hold" button -->
     <string name="onscreenHoldText">Hold</string>
@@ -516,6 +522,18 @@
     <!-- Description of the target to decline a request to upgrade from an audio call to a video call.
          [CHAR LIMIT=NONE] -->
     <string name="description_target_decline_upgrade_to_video_request">Decline video request</string>
+    <!-- Description of the target to accept a request to upgrade from any call to a video transmit call.
+         [CHAR LIMIT=NONE] -->
+    <string name="description_target_accept_upgrade_to_video_transmit_request">Accept video transmit request</string>
+    <!-- Description of the target to decline a request to upgrade from any call to a video transmit call.
+         [CHAR LIMIT=NONE] -->
+    <string name="description_target_decline_upgrade_to_video_transmit_request">Decline video transmit request</string>
+        <!-- Description of the target to accept a request to upgrade from any call to a video receive call.
+         [CHAR LIMIT=NONE] -->
+    <string name="description_target_accept_upgrade_to_video_receive_request">Accept video receive request</string>
+    <!-- Description of the target to decline a request to upgrade from any call to a video receive call.
+         [CHAR LIMIT=NONE] -->
+    <string name="description_target_decline_upgrade_to_video_receive_request">Decline video receive request</string>
 
     <!-- Description of the up direction in which one can to slide the handle in the phone answer screen. [CHAR LIMIT=NONE] -->
     <string name="description_direction_up">Slide up for <xliff:g id="target_description" example="Unlock">%s</xliff:g>.</string>

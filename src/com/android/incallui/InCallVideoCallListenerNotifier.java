@@ -123,13 +123,13 @@ public class InCallVideoCallListenerNotifier {
 
     /**
      * Inform listeners of an upgrade to video request for a call.
-     *
      * @param call The call.
+     * @param videoState The video state we want to upgrade to.
      */
-    public void upgradeToVideoRequest(Call call) {
-        Log.d(this, "upgradeToVideoRequest call=" + call);
+    public void upgradeToVideoRequest(Call call, int videoState) {
+        Log.d(this, "upgradeToVideoRequest call = " + call + " new video state = " + videoState);
         for (SessionModificationListener listener : mSessionModificationListeners) {
-            listener.onUpgradeToVideoRequest(call);
+            listener.onUpgradeToVideoRequest(call, videoState);
         }
     }
 
@@ -228,6 +228,18 @@ public class InCallVideoCallListenerNotifier {
     }
 
     /**
+     * Inform listeners of a change to camera zoom capabilities.
+     *
+     * @param isZoomSupported If the new camera supports zoom, set to true, else false.
+     * @param maxZoom The max zoom supported by the new camera.
+     */
+    public void cameraZoomCapabilitiesChanged(Call call, boolean isZoomSupported, float maxZoom) {
+        for (SurfaceChangeListener listener : mSurfaceChangeListeners) {
+            listener.onCameraZoomCapabilitiesChange(call, isZoomSupported, maxZoom);
+        }
+    }
+
+    /**
      * Inform listeners of a change to call data usage.
      *
      * @param dataUsage data usage value
@@ -247,8 +259,9 @@ public class InCallVideoCallListenerNotifier {
          * Called when a peer request is received to upgrade an audio-only call to a video call.
          *
          * @param call The call the request was received for.
+         * @param videoState The video state that the request wants to upgrade to.
          */
-        public void onUpgradeToVideoRequest(Call call);
+        public void onUpgradeToVideoRequest(Call call, int videoState);
 
         /**
          * Called when a request to a peer to upgrade an audio-only call to a video call is
@@ -336,5 +349,14 @@ public class InCallVideoCallListenerNotifier {
          * @param height The new camera video height.
          */
         public void onCameraDimensionsChange(Call call, int width, int height);
+
+        /**
+         * Called when the local camera changes zoom capabilities.
+         *
+         * @param isZoomSupported If the new camera supports zoom, set to true, else false.
+         * @param maxZoom The max zoom supported by the new camera.
+         */
+        public void onCameraZoomCapabilitiesChange(Call call, boolean isZoomSupported,
+            float maxZoom);
     }
 }
