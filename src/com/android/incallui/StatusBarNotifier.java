@@ -32,7 +32,7 @@ import android.os.Message;
 import android.telecom.PhoneAccount;
 import android.telecom.PhoneCapabilities;
 import android.telephony.SubscriptionManager;
-import android.telephony.SubInfoRecord;
+import android.telephony.SubscriptionInfo;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 
@@ -184,6 +184,13 @@ public class StatusBarNotifier implements InCallPresenter.InCallStateListener {
                 state == InCallState.OUTGOING &&
                 !InCallPresenter.getInstance().isActivityPreviouslyStarted();
 
+        // In case of voicePrivacy the notification has to be shown even if the UI is
+        // already shwoing
+        boolean voicePrivacy = false;
+        if (call != null && call.can(PhoneCapabilities.VOICE_PRIVACY)) {
+            voicePrivacy = true;
+        }
+
         // Whether to show a notification immediately.
         boolean showNotificationNow =
 
@@ -197,7 +204,8 @@ public class StatusBarNotifier implements InCallPresenter.InCallStateListener {
                 // If the UI is already showing, then for most cases we do not want to show
                 // a notification since that would be redundant, unless it is an incoming call,
                 // in which case the notification is actually an important alert.
-                (!InCallPresenter.getInstance().isShowingInCallUi() || state.isIncoming()) &&
+                (!InCallPresenter.getInstance().isShowingInCallUi() || state.isIncoming() ||
+                        voicePrivacy) &&
 
                 // If we have an outgoing call with no UI but the timer has fired, we show
                 // a notification anyway.
@@ -299,10 +307,11 @@ public class StatusBarNotifier implements InCallPresenter.InCallStateListener {
         builder.setColor(mContext.getResources().getColor(R.color.dialer_theme_color));
 
         if (TelephonyManager.getDefault().isMultiSimEnabled()) {
-            final long subId = call.getSubId();
-            SubInfoRecord subInfoRecord = SubscriptionManager.getSubInfoForSubscriber(subId);
+            final int subId = call.getSubId();
+            SubscriptionManager mgr = SubscriptionManager.from(mContext);
+            SubscriptionInfo subInfoRecord = mgr.getActiveSubscriptionInfo(subId);
             if (subInfoRecord != null) {
-                String displayName = subInfoRecord.displayName;
+                String displayName = (String)subInfoRecord.getDisplayName();
                 builder.setContentTitle(displayName);
                 builder.setContentText(contentTitle);
                 builder.setSubText(mContext.getString(contentResId));

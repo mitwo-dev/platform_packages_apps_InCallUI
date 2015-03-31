@@ -257,11 +257,24 @@ public class CallCardPresenter extends Presenter<CallCardPresenter.CallCardUi>
 
         maybeShowManageConferenceCallButton();
 
+        //Note that both primary and secondary calls can be modified
+        final boolean isModifyRequest = isPendingModifyRequest(mPrimary) ||
+                isPendingModifyRequest(mSecondary);
+
         final boolean enableEndCallButton = Call.State.isConnectingOrConnected(callState) &&
-                callState != Call.State.INCOMING && mPrimary != null;
-        // Hide the end call button instantly if we're receiving an incoming call.
+                callState != Call.State.INCOMING && mPrimary != null && !isModifyRequest;
+        /* Hide the end call button instantly if we're receiving an incoming call
+           or when receiving a modify request */
         getUi().setEndCallButtonEnabled(
-                enableEndCallButton, callState != Call.State.INCOMING /* animate */);
+                enableEndCallButton, callState != Call.State.INCOMING &&
+                !isModifyRequest /* animate */);
+    }
+
+    //Return TRUE if there is a modify request pending user action
+    boolean isPendingModifyRequest(Call call) {
+        return (call != null && call.getSessionModificationState() ==
+                Call.SessionModificationState.RECEIVED_UPGRADE_TO_VIDEO_REQUEST);
+
     }
 
     @Override
@@ -298,7 +311,7 @@ public class CallCardPresenter extends Presenter<CallCardPresenter.CallCardUi>
                     mPrimary.getSessionModificationState(),
                     mPrimary.getDisconnectCause(),
                     getConnectionLabel(),
-                    getConnectionIcon(),
+                    getCallStateIcon(),
                     getGatewayNumber());
             setCallbackNumber();
         }
@@ -590,7 +603,7 @@ public class CallCardPresenter extends Presenter<CallCardPresenter.CallCardUi>
         // accounts pick icon from phone account and display on UI
         if (account != null && (getTelecomManager().hasMultipleCallCapableAccounts()
                 || (CallList.PHONE_COUNT > 1))) {
-            return account.getIcon(mContext);
+            return account.createIconDrawable(mContext);
         }
         return null;
     }
@@ -635,7 +648,8 @@ public class CallCardPresenter extends Presenter<CallCardPresenter.CallCardUi>
         return getCallProviderLabel(mPrimary);
     }
 
-    private Drawable getConnectionIcon() {
+    private Drawable getCallStateIcon() {
+        // Return connection icon if one exists.
         StatusHints statusHints = mPrimary.getTelecommCall().getDetails().getStatusHints();
         if (statusHints != null && statusHints.getIconResId() != 0) {
             Drawable icon = statusHints.getIcon(mContext);
@@ -643,7 +657,15 @@ public class CallCardPresenter extends Presenter<CallCardPresenter.CallCardUi>
                 return icon;
             }
         }
-        return getCallProviderIcon(mPrimary);
+
+        // Return high definition audio icon if the capability is indicated.
+        if (mPrimary.getTelecommCall().getDetails().can(
+                android.telecom.Call.Details.CAPABILITY_HIGH_DEF_AUDIO)
+                && mPrimary.getState() == Call.State.ACTIVE) {
+            return mContext.getResources().getDrawable(R.drawable.ic_hd_audio);
+        }
+
+        return null;
     }
 
     private boolean hasOutgoingGatewayCall() {
