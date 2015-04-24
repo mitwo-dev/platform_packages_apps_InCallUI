@@ -292,11 +292,16 @@ public final class Call {
             mTelecommCall.getVideoCall().setVideoCallListener(mVideoCallListener);
         }
 
+        final List<android.telecom.Call> children = mTelecommCall.getChildren();
+        if (children == null){
+            Log.e(this, "updateFromTelecommCall: children null " + mTelecommCall);
+            return;
+        }
         mChildCallIds.clear();
-        for (int i = 0; i < mTelecommCall.getChildren().size(); i++) {
+        for (int i = 0; i < children.size(); i++) {
             mChildCallIds.add(
                     CallList.getInstance().getCallByTelecommCall(
-                            mTelecommCall.getChildren().get(i)).getId());
+                            children.get(i)).getId());
         }
     }
 
